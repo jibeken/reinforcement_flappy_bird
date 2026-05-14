@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Bird — Q-Learning</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222536;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --muted: #7b7f96;
+    --accent: #1D9E75;
+    --accent2: #EF9F27;
+    --coral: #D85A30;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15,17,23,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 15px; letter-spacing: 0.3px;
+  }
+  .bird-icon {
+    width: 28px; height: 28px;
+    background: var(--accent2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .nav-links { display: flex; gap: 2rem; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none; font-size: 14px;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+
+  .hero {
+    text-align: center;
+    padding: 5rem 2rem 4rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .badge {
+    display: inline-block;
+    background: rgba(29,158,117,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(29,158,117,0.3);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #e8eaf0 0%, #7b7f96 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p {
+    color: var(--muted);
+    font-size: 1.05rem;
+    max-width: 520px;
+    margin: 0 auto 2.5rem;
+  }
+
+  .stats {
+    display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap;
+    padding: 1.5rem 2rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4rem;
+  }
+  .stat { text-align: center; }
+  .stat-val {
+    font-size: 1.8rem; font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-label {
+    font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem 4rem;
+  }
+  @media (max-width: 760px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card-header h2 {
+    font-size: 14px; font-weight: 600;
+    color: var(--text); letter-spacing: 0.2px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .dot.amber { background: var(--accent2); }
+  .card-body { padding: 1.5rem; }
+
+  .gif-wrap {
+    background: #0a1a14;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 320px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gif-wrap img {
+    max-width: 100%;
+    max-height: 400px;
+    image-rendering: pixelated;
+    display: block;
+    border-radius: 0;
+  }
+  .gif-placeholder {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px;
+    color: var(--muted); font-size: 13px;
+    padding: 3rem;
+    text-align: center;
+  }
+  .gif-placeholder .icon {
+    font-size: 3rem; opacity: 0.4;
+  }
+  .file-hint {
+    background: rgba(29,158,117,0.1);
+    border: 1px dashed rgba(29,158,117,0.4);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 12px;
+    color: var(--accent);
+    font-family: monospace;
+    margin-top: 8px;
+  }
+
+  .plot-wrap {
+    background: #080e1a;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 300px;
+    position: relative;
+    overflow: hidden;
+  }
+  .plot-wrap img {
+    max-width: 100%;
+    display: block;
+  }
+
+  .how-section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem 5rem;
+  }
+  .section-title {
+    font-size: 1.1rem; font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::after {
+    content: ''; flex: 1;
+    height: 1px; background: var(--border);
+  }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+  .step-num {
+    font-size: 11px; font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .step h3 {
+    font-size: 14px; font-weight: 600;
+    margin-bottom: 6px; color: var(--text);
+  }
+  .step p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  .params-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+  }
+  .param {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .param-key { font-size: 11px; color: var(--muted); font-family: monospace; }
+  .param-val { font-size: 18px; font-weight: 600; color: var(--accent2); }
+
+  /* UPLOAD CONTROLS */
+  .upload-row {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  label.upload-btn, a.upload-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(29,158,117,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(29,158,117,0.3);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+  label.upload-btn:hover, a.upload-btn:hover {
+    background: rgba(29,158,117,0.2);
+  }
+  input[type=file] { display: none; }
+
+  code {
+    font-family: monospace;
+    background: var(--surface2);
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: var(--accent2);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <div class="bird-icon">🐦</div>
+    Flappy Bird · Q-Learning
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="badge">Reinforcement Learning</div>
+  <h1>Flappy Bird</h1>
+</section>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-val">800</div>
+    <div class="stat-label">эпизодов</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val" style="color:var(--accent2)">540</div>
+    <div class="stat-label">Q-состояний</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val" style="color:var(--coral)">0.99</div>
+    <div class="stat-label">gamma γ</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val">0.01</div>
+    <div class="stat-label">epsilon min</div>
+  </div>
+</div>
+
+<div class="main-grid">
+
+  <!-- GIF card -->
+  <div class="card" id="demo">
+    <div class="card-header">
+      <div class="dot amber"></div>
+      <h2>Обученный агент</h2>
+    </div>
+    <div class="gif-wrap" id="gif-wrap">
+      <div class="gif-placeholder" id="gif-placeholder">
+        <div class="icon">🎮</div>
+        <div>Загрузите GIF обученного агента</div>
+        <div class="file-hint">flappy_trained.gif</div>
+      </div>
+      <img id="gif-img" src="" alt="Обученный агент" style="display:none">
+    </div>
+    <div class="upload-row">
+      <label class="upload-btn" for="gif-input">
+        ↑ Загрузить GIF
+      </label>
+      <input type="file" id="gif-input" accept="image/gif">
+    </div>
+  </div>
+
+  <!-- Plot card -->
+  <div class="card" id="training">
+    <div class="card-header">
+      <div class="dot"></div>
+      <h2>График обучения</h2>
+    </div>
+    <div class="plot-wrap" id="plot-wrap">
+      <div class="gif-placeholder" id="plot-placeholder">
+        <div class="icon">📈</div>
+        <div>Загрузите график наград</div>
+        <div class="file-hint">reward_plot.png</div>
+      </div>
+      <img id="plot-img" src="" alt="График обучения" style="display:none; max-width:100%">
+    </div>
+    <div class="upload-row">
+      <label class="upload-btn" for="plot-input">
+        ↑ Загрузить график
+      </label>
+      <input type="file" id="plot-input" accept="image/*">
+    </div>
+  </div>
+
+</div>
+
+<!-- HOW IT WORKS -->
+<div class="how-section" id="how">
+  <div class="section-title">Как работает Q-Learning</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">Шаг 01</div>
+      <h3>Состояние</h3>
+      <p>Агент видит 3 параметра: относительная высота птицы, дистанция до трубы, вертикальная скорость.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">Шаг 02</div>
+      <h3>Действие</h3>
+      <p>Бинарное решение: прыгнуть (1) или лететь вниз (0).</p>
+    </div>
+    <div class="step">
+      <div class="step-num">Шаг 03</div>
+      <h3>Награда</h3>
+      <p>+10 за каждую пройденную трубу, −20 за столкновение или падение на землю.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">Шаг 04</div>
+      <h3>Обновление Q</h3>
+      <p><code>Q(s,a) ← Q(s,a) + α·(r + γ·max Q(s') − Q(s,a))</code></p>
+    </div>
+  </div>
+
+<script>
+  function loadImage(inputId, imgId, placeholderId) {
+    document.getElementById(inputId).addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const img = document.getElementById(imgId);
+      const ph = document.getElementById(placeholderId);
+      img.src = url;
+      img.style.display = 'block';
+      if (ph) ph.style.display = 'none';
+    });
+  }
+  loadImage('gif-input', 'gif-img', 'gif-placeholder');
+  loadImage('plot-input', 'plot-img', 'plot-placeholder');
+</script>
+</div>>
+</body>
+</html>
